@@ -28,3 +28,7 @@ full_build.log
 *.swp
 *~
 .DS_Store
+
+# Local-only docs
+CLAUDE.md
+BUILD_TEST_SEQUENCE.md
