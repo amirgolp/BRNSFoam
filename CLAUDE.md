@@ -6,6 +6,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 GeoChemFoam (v5.1) is an OpenFOAM-based package for pore-scale reactive multiphase transport simulation. It extends OpenFOAM v2212 with specialized solvers for chemical reactions, species transport, and multiphase flow at the micro-scale.
 
+## Repository Topology
+
+This local working directory is **not** the source of truth. Three locations exist:
+
+1. **HPC upstream (authoritative for code + builds):**
+   `nhdfamgo@login.cluster.uni-hannover.de:~/BRNSFoam-new`
+   This is where the code is built and run. OpenFOAM v2212 and the toolchain only live on the cluster — `wmake` cannot be invoked locally.
+   When the user has it SFTP-mounted on the laptop, it appears at:
+   `/run/user/1000/gvfs/sftp:host=login.cluster.uni-hannover.de,user=nhdfamgo/home/nhdfamgo/BRNSFoam-new`
+   The mount is only present when the user has opened the SFTP connection in Files; if it's missing, ask before assuming it's available.
+
+2. **This local working copy** (`/home/amir/workspace/BRNSFoam-new`):
+   Used for code editing only. Builds happen on the HPC. Sync direction is upstream → local for refresh, and local → upstream for changes the user wants deployed. Use `rsync -c --exclude='.git' --exclude='.claude' --exclude='*.o' --exclude='*.dep' --exclude='lnInclude' --exclude='linux64*' --exclude='processor*' --exclude='*.so'` and confirm direction with the user before any sync that overwrites.
+
+3. **GitHub mirror:** `git@github.com:amirgolp/BRNSFoam.git` (origin/main).
+   Tracks the local working copy. Not authoritative — the HPC is. Push here only when the user asks.
+
 ## Build Commands
 
 ```bash
