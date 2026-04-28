@@ -1,0 +1,28 @@
+#!/bin/bash
+#------------------------------------------------------------------------------
+# BRNSFoam clean script
+#------------------------------------------------------------------------------
+cd "${0%/*}" || exit 1
+
+echo "Cleaning BRNSFoam..."
+
+# Clean BRNS reaction module
+if [ -f "lib/BRNS/Allwclean" ]; then
+    (cd lib/BRNS && ./Allwclean)
+fi
+
+# Clean source
+(cd src && ./Allwclean 2>/dev/null)
+
+# Clean applications
+(cd applications && ./Allwclean 2>/dev/null)
+
+# Remove build directories (preserve BRNS source)
+rm -rf bin
+# Remove compiled libraries from lib/ but keep BRNS directory
+find lib -maxdepth 1 -type f -name "*.so" -delete 2>/dev/null
+find lib -maxdepth 1 -type f -name "*.a" -delete 2>/dev/null
+
+echo "BRNSFoam cleaned."
+
+#------------------------------------------------------------------------------

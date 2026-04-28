@@ -1,0 +1,3 @@
+interBRNSFoam.C
+
+EXE = $(BRNSFOAM_APPBIN)/interBRNSFoam

@@ -1,0 +1,16 @@
+#!/bin/bash
+#------------------------------------------------------------------------------
+# BRNS library clean script
+#------------------------------------------------------------------------------
+cd "${0%/*}" || exit 1
+
+rm -rf lib
+
+# Call make clean if Makefile exists
+if [ -f "src/Makefile" ]; then
+    (cd src && make clean 2>/dev/null)
+fi
+
+echo "BRNS library cleaned."
+
+#------------------------------------------------------------------------------

@@ -1,0 +1,30 @@
+# OpenFOAM build artifacts
+*.o
+*.dep
+*.so
+lnInclude/
+linux64*/
+processor*/
+
+# Compiled binaries / library outputs
+bin/
+lib/BRNS/lib/
+
+# Tutorial run artifacts
+tutorials/**/[0-9]*[0-9]/
+tutorials/**/postProcessing/
+tutorials/**/constant/polyMesh/
+!tutorials/**/0/
+
+# Logs
+*.log
+logMake.out
+full_build.log
+
+# Editor / tooling
+.claude/
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store

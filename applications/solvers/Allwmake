@@ -1,0 +1,17 @@
+#!/bin/bash
+#------------------------------------------------------------------------------
+# BRNSFoam solvers build script
+#------------------------------------------------------------------------------
+cd "${0%/*}" || exit 1
+
+set -e
+
+echo "Building interBRNSFoam..."
+(cd interBRNSFoam && wmake)
+
+echo "Building interBRNSALEFoam..."
+(cd interBRNSALEFoam && wmake)
+
+echo "Solvers built successfully."
+
+#------------------------------------------------------------------------------

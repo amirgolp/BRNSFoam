@@ -1,0 +1,21 @@
+#!/bin/bash
+#------------------------------------------------------------------------------
+# BRNSFoam src build script
+#------------------------------------------------------------------------------
+cd "${0%/*}" || exit 1
+
+set -e
+
+echo "Building thermophysicalModels..."
+(cd thermophysicalModels/reactionThermo && wmake libso)
+
+echo "Building fvMotionSolver..."
+(cd fvMotionSolver && wmake libso)
+
+echo "Building transportModels..."
+(cd transportModels/interfaceProperties && wmake libso)
+(cd transportModels/immiscibleIncompressibleTwoPhaseMixture && wmake libso)
+
+echo "src libraries built successfully."
+
+#------------------------------------------------------------------------------

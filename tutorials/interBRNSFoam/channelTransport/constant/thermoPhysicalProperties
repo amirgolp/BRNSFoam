@@ -1,0 +1,56 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2212                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "constant";
+    object      thermoPhysicalProperties;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+Phase1 inertMultiComponentMixture;
+Phase2 inertMultiComponentMixture;
+
+solutionSpecies
+{
+    // Substrate (organic carbon)
+    C_S
+    {
+        D1 D1 [ 0 2 -1 0 0 0 0 ] 1e-9;      // Diffusion in water
+        D2 D2 [ 0 2 -1 0 0 0 0 ] 1e-9;      // Diffusion in air
+        H H [ 0 0 0 0 0 0 0 ] 1e-4;         // Henry's constant
+        Mw Mw [1 0 0 0 -1 0 0] 180;         // Molecular weight
+    }
+
+    // Dissolved oxygen
+    C_O2
+    {
+        D1 D1 [ 0 2 -1 0 0 0 0 ] 2.1e-9;    // Diffusion in water
+        D2 D2 [ 0 2 -1 0 0 0 0 ] 1.6e-5;    // Diffusion in air
+        H H [ 0 0 0 0 0 0 0 ] 0.03;         // Henry's constant (volatile)
+        Mw Mw [1 0 0 0 -1 0 0] 32;          // Molecular weight
+    }
+};
+
+// Transport-only mode: no brnsSpecies entry
+// To enable BRNS reactions, add:
+//   brnsSpecies ( C_S C_O2 X_S );
+//   solidPhaseFields ( X_S );
+//   solidPhaseInit 0.1;
+
+surfaceSpecies
+{
+};
+
+surfaceMasters
+{
+}
+
+// ************************************************************************* //

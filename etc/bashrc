@@ -1,0 +1,45 @@
+#!/bin/bash
+#------------------------------------------------------------------------------
+# BRNSFoam environment setup
+#------------------------------------------------------------------------------
+
+# Set BRNSFoam installation directory
+export BRNSFOAM_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd )"
+export BRNSFOAM_SRC=$BRNSFOAM_DIR/src
+export BRNSFOAM_APPBIN=$BRNSFOAM_DIR/bin
+export BRNSFOAM_LIBBIN=$BRNSFOAM_DIR/lib
+export BRNSFOAM_TUTORIALS=$BRNSFOAM_DIR/tutorials
+
+# Create directories if they don't exist
+mkdir -p $BRNSFOAM_APPBIN
+mkdir -p $BRNSFOAM_LIBBIN
+
+# Add BRNSFoam paths
+export PATH=$BRNSFOAM_APPBIN:$PATH
+export LD_LIBRARY_PATH=$BRNSFOAM_LIBBIN:$LD_LIBRARY_PATH
+
+# BRNS Reaction Module
+export BRNS_DIR=$BRNSFOAM_DIR/lib/BRNS
+export BRNS_LIBBIN=$BRNS_DIR/lib
+if [ -d "$BRNS_LIBBIN" ]; then
+    export LD_LIBRARY_PATH=$BRNS_LIBBIN:$LD_LIBRARY_PATH
+fi
+
+# Aliases
+alias brnsdir='cd $BRNSFOAM_DIR'
+alias brnssrc='cd $BRNSFOAM_SRC'
+alias brnsapp='cd $BRNSFOAM_DIR/applications'
+alias brnstut='cd $BRNSFOAM_TUTORIALS'
+
+echo ""
+echo "=========================================="
+echo "  BRNSFoam Environment Loaded"
+echo "=========================================="
+echo "  BRNSFOAM_DIR:    $BRNSFOAM_DIR"
+echo "  BRNSFOAM_APPBIN: $BRNSFOAM_APPBIN"
+echo "  BRNSFOAM_LIBBIN: $BRNSFOAM_LIBBIN"
+echo "  BRNS_LIBBIN:     $BRNS_LIBBIN"
+echo "=========================================="
+echo ""
+
+#------------------------------------------------------------------------------

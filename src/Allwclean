@@ -1,0 +1,12 @@
+#!/bin/bash
+#------------------------------------------------------------------------------
+# BRNSFoam src clean script
+#------------------------------------------------------------------------------
+cd "${0%/*}" || exit 1
+
+wclean libso thermophysicalModels/reactionThermo 2>/dev/null
+wclean libso fvMotionSolver 2>/dev/null
+wclean libso transportModels/interfaceProperties 2>/dev/null
+wclean libso transportModels/immiscibleIncompressibleTwoPhaseMixture 2>/dev/null
+
+#------------------------------------------------------------------------------

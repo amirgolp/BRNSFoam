@@ -1,0 +1,43 @@
+#!/bin/bash
+#------------------------------------------------------------------------------
+# BRNS library build script
+#
+# This script calls your Makefile to build brns.so
+# Place your BRNS source files and Makefile in src/ directory.
+#
+# Expected output: lib/brns.so
+#------------------------------------------------------------------------------
+cd "${0%/*}" || exit 1
+
+# Check if Makefile exists
+if [ ! -f "src/Makefile" ]; then
+    echo "Error: No Makefile found in src/"
+    echo "       Please add your BRNS source files and Makefile to src/"
+    exit 1
+fi
+
+# Create lib directory
+mkdir -p lib
+
+echo "Building BRNS library..."
+
+cd src
+
+# Call the user's Makefile
+make
+
+# Move the output to lib directory if it was built in src
+if [ -f "brns.so" ]; then
+    mv brns.so ../lib/
+fi
+
+cd ..
+
+if [ -f "lib/brns.so" ]; then
+    echo "BRNS library built: lib/brns.so"
+else
+    echo "Error: brns.so not found after build"
+    exit 1
+fi
+
+#------------------------------------------------------------------------------

@@ -1,0 +1,60 @@
+#!/bin/bash
+#------------------------------------------------------------------------------
+# BRNSFoam build script
+#------------------------------------------------------------------------------
+cd "${0%/*}" || exit 1    # Run from this directory
+
+# Source the environment
+if [ -z "$BRNSFOAM_DIR" ]; then
+    source etc/bashrc
+fi
+
+# Create output directories
+mkdir -p $BRNSFOAM_APPBIN
+mkdir -p $BRNSFOAM_LIBBIN
+
+echo "============================================"
+echo "Building BRNSFoam"
+echo "============================================"
+
+BUILD_FAILED=0
+
+# Build BRNS reaction module if source exists
+if [ -d "lib/BRNS/src" ] && [ "$(ls -A lib/BRNS/src 2>/dev/null)" ]; then
+    echo ""
+    echo "Building BRNS reaction module..."
+    (cd lib/BRNS && ./Allwmake) || BUILD_FAILED=1
+else
+    echo ""
+    echo "Note: lib/BRNS/src is empty - skipping BRNS library build"
+    echo "      Add your BRNS Fortran source files to lib/BRNS/src/"
+fi
+
+# Build source libraries
+if [ $BUILD_FAILED -eq 0 ]; then
+    echo ""
+    echo "Building src libraries..."
+    (cd src && ./Allwmake) || BUILD_FAILED=1
+fi
+
+# Build applications
+if [ $BUILD_FAILED -eq 0 ]; then
+    echo ""
+    echo "Building applications..."
+    (cd applications && ./Allwmake) || BUILD_FAILED=1
+fi
+
+echo ""
+echo "============================================"
+if [ $BUILD_FAILED -eq 0 ]; then
+    echo "BRNSFoam build complete!"
+else
+    echo "BRNSFoam build FAILED!"
+    echo "Check the build logs above for errors."
+fi
+echo "============================================"
+echo ""
+
+exit $BUILD_FAILED
+
+#------------------------------------------------------------------------------

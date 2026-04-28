@@ -1,0 +1,4 @@
+pointPatchFields/derived/dissolSolidVelocity/dissolSolidVelocityPointPatchVectorField.C
+pointPatchFields/derived/solidGrowthVelocity/solidGrowthVelocityPointPatchVectorField.C
+
+LIB = $(BRNSFOAM_LIBBIN)/libfvMotionSolverBRNSFOAM

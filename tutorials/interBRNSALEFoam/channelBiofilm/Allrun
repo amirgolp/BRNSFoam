@@ -1,0 +1,20 @@
+#!/bin/bash
+#------------------------------------------------------------------------------
+# interBRNSALEFoam channelBiofilm tutorial - Allrun
+#
+# Two-phase stagnant channel with biofilm growth at bottom wall.
+# Requires BRNS Fortran library (ThirdParty/BRNS/lib/brns.so).
+#------------------------------------------------------------------------------
+cd "${0%/*}" || exit 1
+. ${WM_PROJECT_DIR:?}/bin/tools/RunFunctions
+
+# 1. Create mesh
+runApplication blockMesh
+
+# 2. Set initial water level (bottom 60% of channel)
+runApplication setFields
+
+# 3. Run solver
+runApplication interBRNSALEFoam
+
+#------------------------------------------------------------------------------

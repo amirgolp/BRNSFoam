@@ -1,0 +1,93 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2212                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "constant";
+    object      thermoPhysicalProperties;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+//  Biofilm growth network — 4 species, 3 reactions
+//
+//  Species order MUST match BRNS common_geo.inc:
+//    sp(1) = C_S    organic substrate       [mol/m³]
+//    sp(2) = C_O2   dissolved oxygen        [mol/m³]
+//    sp(3) = C_NO3  nitrate                 [mol/m³]
+//    sp(4) = X_A    active biomass          [mol/m³]
+//
+//  Reactions:
+//    R1  Aerobic growth:    mu_max*(C_S/(K_S+C_S))*(C_O2/(K_O2+C_O2))*X_A
+//    R2  Anoxic growth:     nu_anox*mu_max*(C_S/(K_S+C_S))*(C_NO3/(K_NO+C_NO3))
+//                                    *(K_i_O2/(K_i_O2+C_O2))*X_A
+//    R3  Endogenous decay:  b_S * X_A
+//
+//  Parameters (in biogeo.f):
+//    mu_max  = 1/28800 s⁻¹  (~3 d⁻¹)
+//    b_S     = 7.176e-6 s⁻¹ (~0.62 d⁻¹)
+//    K_S     = 0.3   mol/m³
+//    K_O2    = 6.25e-3 mol/m³
+//    K_NO    = 3.57e-2 mol/m³
+//    K_i_O2  = 3.125e-3 mol/m³  (O2 inhibition constant for anoxic growth)
+//    nu_anox = 0.8              (anoxic reduction factor)
+
+Phase1 inertMultiComponentMixture;
+Phase2 inertMultiComponentMixture;
+
+solutionSpecies
+{
+    C_S
+    {
+        D1 D1 [ 0 2 -1 0 0 0 0 ] 1e-9;
+        D2 D2 [ 0 2 -1 0 0 0 0 ] 1e-9;
+        H  H  [ 0 0  0 0 0 0 0 ] 1e-4;
+        Mw Mw [ 1 0  0 0 -1 0 0] 180;
+    }
+
+    C_O2
+    {
+        D1 D1 [ 0 2 -1 0 0 0 0 ] 2.1e-9;
+        D2 D2 [ 0 2 -1 0 0 0 0 ] 1.6e-5;
+        H  H  [ 0 0  0 0 0 0 0 ] 0.03;
+        Mw Mw [ 1 0  0 0 -1 0 0] 32;
+    }
+
+    C_NO3
+    {
+        D1 D1 [ 0 2 -1 0 0 0 0 ] 1.7e-9;
+        D2 D2 [ 0 2 -1 0 0 0 0 ] 1.7e-9;
+        H  H  [ 0 0  0 0 0 0 0 ] 1e-6;
+        Mw Mw [ 1 0  0 0 -1 0 0] 62;
+    }
+
+    X_A
+    {
+        D1 D1 [ 0 2 -1 0 0 0 0 ] 1e-12;  // near-zero: no real diffusion
+        D2 D2 [ 0 2 -1 0 0 0 0 ] 1e-12;
+        H  H  [ 0 0  0 0 0 0 0 ] 1e-10;  // non-zero to avoid div/0 in compressionCoeff
+        Mw Mw [ 1 0  0 0 -1 0 0] 24;
+    }
+};
+
+// BRNS species — order must match sp(1..4) in the Fortran network
+brnsSpecies ( C_S C_O2 C_NO3 X_A );
+
+// No solid-phase fields in this network (nsolid=0 in common_geo.inc)
+solidPhaseFields ();
+
+surfaceSpecies
+{
+};
+
+surfaceMasters
+{
+}
+
+// ************************************************************************* //
