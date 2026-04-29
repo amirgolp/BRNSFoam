@@ -1,0 +1,15 @@
+#!/bin/bash
+#------------------------------------------------------------------------------
+# darcyBrinkmanBRNSFoam box1D tutorial - Allrun
+#
+# Single-phase porous column: water flows in from the left through a uniform
+# porous medium (eps=0.6), carrying dissolved O2. Transport-only mode by
+# default (no brnsSpecies in thermoPhysicalProperties).
+#------------------------------------------------------------------------------
+cd "${0%/*}" || exit 1
+. ${WM_PROJECT_DIR:?}/bin/tools/RunFunctions
+
+runApplication blockMesh
+runApplication darcyBrinkmanBRNSFoam
+
+#------------------------------------------------------------------------------

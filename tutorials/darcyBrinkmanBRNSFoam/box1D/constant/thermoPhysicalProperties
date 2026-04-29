@@ -1,0 +1,33 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2212                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "constant";
+    object      thermoPhysicalProperties;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// Single-phase form expected by darcyBrinkmanBRNSFoam:
+//   solutionSpecies: list of solute fields read from 0/<name>
+//   D_<name>:        per-species diffusivity (must match each entry above)
+
+solutionSpecies ( O2 );
+
+D_O2    D_O2 [ 0 2 -1 0 0 0 0 ] 2.1e-9;
+
+// To enable BRNS reactions, declare the active species and (optionally)
+// solid-phase fields, then attach a 'reactingWall' BC to a patch in 0/Surf:
+//
+//   brnsSpecies      ( O2 X_S );
+//   solidPhaseFields ( X_S );
+//   solidPhaseInit   0.1;
+
+// ************************************************************************* //

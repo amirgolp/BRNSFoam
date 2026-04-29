@@ -1,0 +1,3 @@
+darcyBrinkmanBRNSFoam.C
+
+EXE = $(BRNSFOAM_APPBIN)/darcyBrinkmanBRNSFoam

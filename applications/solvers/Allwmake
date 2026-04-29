@@ -12,6 +12,9 @@ echo "Building interBRNSFoam..."
 echo "Building interBRNSALEFoam..."
 (cd interBRNSALEFoam && wmake)
 
+echo "Building darcyBrinkmanBRNSFoam..."
+(cd darcyBrinkmanBRNSFoam && wmake)
+
 echo "Solvers built successfully."
 
 #------------------------------------------------------------------------------
