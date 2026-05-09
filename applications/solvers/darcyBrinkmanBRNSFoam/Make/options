@@ -16,5 +16,6 @@ EXE_LIBS = \
     -lincompressibleTransportModels \
     -lreactionThermophysicalModelsBRNSFOAM \
     -lspecie \
+    -lopenblas \
     $(BRNS_LIBBIN)/brns.so \
     -lgfortran
