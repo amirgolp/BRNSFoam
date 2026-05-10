@@ -32,4 +32,5 @@ full_build.log
 # Local-only docs
 CLAUDE.md
 BUILD_TEST_SEQUENCE.md
+CONCENTRATION_DRIFT_FIX.md
 *.pdf
