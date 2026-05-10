@@ -1,9 +1,40 @@
 {
-    // Henry-mapped formulation. With Dbar = alpha + H*(1-alpha), the
-    // combined diffusion + Henry-transfer face flux equals -gamma*snGrad(Y2)
-    // for Y2 = Yi/Dbar and gamma = D1*alpha + H*D2*(1-alpha). Solving for Y2
-    // makes the transfer term implicit and unconditionally stable; Yi is
-    // recovered as Dbar*Y2 after the solve.
+    // Henry-mapped formulation with consistent advection.
+    //
+    // With Dbar = alpha + H*(1-alpha), the species concentration is
+    // Yi = Dbar*Y2 where Y2 is continuous across the gas-liquid interface
+    // at equilibrium. The transport equation in Y2 is
+    //
+    //   d(Dbar*Y2)/dt + div(phiDbar*Y2) - laplacian(gamma, Y2) = 0
+    //
+    // with gamma = D1*alpha + H*D2*(1-alpha). The diffusion + Henry-transfer
+    // face flux equals -gamma*snGrad(Y2); solving for Y2 makes the
+    // interfacial transfer implicit and unconditionally stable.
+    //
+    // Advective flux phiDbar is built from the mixture flux phi and the
+    // MULES phase-1 volumetric flux alphaPhi10 so that the discrete identity
+    //
+    //   d(Dbar)/dt + div(phiDbar) = 0
+    //
+    // holds (Y2 = const must remain a solution). Since Dbar = H - (H-1)*alpha
+    // and div(phi) = 0 for the incompressible mixture, the choice
+    //
+    //   phiDbar = H*phi + (1 - H)*alphaPhi10
+    //
+    // gives the required divergence and reduces to phi*Yi at single-phase
+    // boundary faces (water-inlet alphaPhi10 = phi -> phiDbar = phi;
+    // gas-inlet alphaPhi10 = 0 -> phiDbar = H*phi, and Y2 = Yi/H there, so
+    // the advected mass is phi*Yi in either case).
+    //
+    // Without this term, alpha is advected by the flow but the species
+    // equation is purely diffusive, so a fluid parcel leaves its dissolved
+    // Yi behind as the interface sweeps through it; with H >> 1 (or << 1)
+    // the resulting Dbar*Y2 recovery rescales the residual concentration
+    // and produces unbounded drift in Yi where there is no reactive sink.
+    //
+    // Note: advection makes the matrix asymmetric, so the fvSolution Yi
+    // block must use a symmetry-agnostic solver (smoothSolver +
+    // symGaussSeidel, or PBiCGStab + diagonal). DIC/DILU will fail.
 
     const speciesTable& solutionSpecies = speciesMixture.species();
 
@@ -46,11 +77,18 @@
             fvc::interpolate(D1*alpha1 + H*D2*(scalar(1) - alpha1))
         );
 
+        surfaceScalarField phiDbar
+        (
+            "phiDbar_" + Yi.name(),
+            H*phi + (scalar(1) - H)*alphaPhi10
+        );
+
         while (simple.correctNonOrthogonal())
         {
             fvScalarMatrix Y2Eqn
             (
                 fvm::ddt(Dbar, Y2)
+              + fvm::div(phiDbar, Y2, "div(phi,Yi)")
               - fvm::laplacian(gamma, Y2)
             );
 
