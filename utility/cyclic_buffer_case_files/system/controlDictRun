@@ -1,0 +1,65 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2212                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      controlDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// Flow-time controlDict for the channelStationaryS75 case.
+// Restore over system/controlDict after every createMesh* run --
+// createMesh_cyclicBuffer.sh copies controlDictInit -> controlDict during
+// the mesh build (snappy needs the init form), wiping anything previously
+// in controlDict.
+//
+// Solver: interBRNSFoam (VOF + biomass species).  Tuned for pore-scale
+// (~2 um cell pitch) capillary-driven flow following channelSTL_S65's
+// successful settings.
+
+application     interBRNSFoam;
+
+// startFrom latestTime lets a resubmitted job resume from the most recent
+// checkpoint instead of starting over from 0.  On a fresh run (only 0/
+// exists) it falls back to time=0 anyway.
+startFrom       latestTime;
+startTime       0;
+
+stopAt          endTime;
+endTime         0.001;
+
+deltaT          1e-7;
+
+// Checkpoint every 100 timesteps so a preemption mid-run doesn't lose
+// hours of progress.  At deltaT ~ 3e-8 (capillary-controlled), that's a
+// snapshot every ~3 us of sim time.
+writeControl    timeStep;
+writeInterval   100;
+
+// Keep only the most recent few snapshots to bound disk usage.
+purgeWrite      5;
+
+writeFormat     ascii;
+writePrecision  8;
+writeCompression off;
+
+timeFormat      general;
+timePrecision   8;
+
+runTimeModifiable yes;
+
+adjustTimeStep  yes;
+maxCo           0.5;
+maxAlphaCo      0.3;
+maxDeltaT       1e-4;
+
+
+// ************************************************************************* //

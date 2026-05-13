@@ -1,0 +1,80 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2212                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      createPatchDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// Convert the snappy-produced `inletSrc` and `outletSrc` patches (named in
+// blockMeshDict2D0 as plain `patch`) into a periodic pair named `inlet`
+// and `outlet`.
+//
+// Type is cyclicAMI, NOT plain cyclic.  Plain cyclic was tried first but
+// the snappy snap step (nSolveIter / nRelaxIter mesh-relaxation against
+// asymmetric grain placement -- the buffered STL keeps grain in [2um,
+// 393um], much closer to the inlet side than the outlet side) drags inlet
+// boundary vertices away from the blockMesh grid by 50-170 nm at many
+// y-positions while the outlet side stays put.  The resulting patch
+// vertex grids no longer match modulo a translation, so cyclicPolyPatch
+// face-pair matching fails with "Cannot match vectors to faces on both
+// sides of patch" and a 3.5% face area mismatch.
+//
+// cyclicAMI tolerates the mismatch via face-area-weighted interpolation.
+// With identical full-cross-section pore patches at both ends (the buffer
+// guarantees this -- both inlet and outlet are 125 fully-open faces of
+// equal area), the AMI weights collapse to ~1.0 / ~1.0 / ~1.0 in
+// checkMesh, meaning AMI is functionally equivalent to plain cyclic but
+// is robust to snap-induced vertex drift.
+//
+// Source patch names (`inletSrc` / `outletSrc`) MUST differ from the
+// target names (`inlet` / `outlet`).  v2212's createPatch silently no-ops
+// when the same-name source is found first by findPatchID.
+
+pointSync false;
+
+matchTolerance 1e-3;
+
+patches
+(
+    {
+        name            inlet;
+        patchInfo
+        {
+            type            cyclicAMI;
+            neighbourPatch  outlet;
+            AMIMethod       faceAreaWeightAMI;
+            transform       translational;
+            // Vector from the inlet patch to the outlet patch.  This is
+            // the blockMesh x-extent (Lx).  Update this if you change Lx
+            // in createMesh_cyclicBuffer.sh's USER INPUT block.
+            separationVector (0.000404 0 0);
+        }
+        constructFrom   patches;
+        patches         (inletSrc);
+    }
+    {
+        name            outlet;
+        patchInfo
+        {
+            type            cyclicAMI;
+            neighbourPatch  inlet;
+            AMIMethod       faceAreaWeightAMI;
+            transform       translational;
+            separationVector (-0.000404 0 0);
+        }
+        constructFrom   patches;
+        patches         (outletSrc);
+    }
+);
+
+// ************************************************************************* //
