@@ -1,0 +1,3 @@
+interBRNSFrozenAlphaFoam.C
+
+EXE = $(BRNSFOAM_APPBIN)/interBRNSFrozenAlphaFoam

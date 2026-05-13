@@ -9,6 +9,9 @@ set -e
 echo "Building interBRNSFoam..."
 (cd interBRNSFoam && wmake)
 
+echo "Building interBRNSFrozenAlphaFoam..."
+(cd interBRNSFrozenAlphaFoam && wmake)
+
 echo "Building interBRNSALEFoam..."
 (cd interBRNSALEFoam && wmake)
 
