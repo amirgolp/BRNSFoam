@@ -13,20 +13,18 @@ Application
 
 Description
     Variant of interBRNSFoam in which the VOF phase fraction alpha1 is held
-    fixed in time: the alpha transport equation (alphaEqnSubCycle.H) is not
-    solved. Everything else is unchanged - momentum/pressure PIMPLE loop,
-    species transport (YiMulesEqn + Henry-mapped YiEqn), BRNS reactions,
+    fixed in time. Everything else is unchanged - momentum/pressure PIMPLE
+    loop, species transport (YiMulesEqn + Henry-mapped YiEqn), BRNS reactions,
     turbulence, and dynamic-mesh hooks all run as in interBRNSFoam.
 
-    Inside the PIMPLE loop, rhoPhi is refreshed as fvc::interpolate(rho)*phi
-    (rho is fixed since alpha1 is). Outside the PIMPLE loop, a Hodge
-    projection produces a discretely divergence-free alphaPhi10:
-        lap(psi) = div(phi*alpha_f)        (zeroGradient BCs)
-        alphaPhi10 = phi*alpha_f - psiEqn.flux()
-    This satisfies the discrete identity div(alphaPhi10) = 0 that YiEqn.H's
-    Henry-mapped formulation requires when alpha is frozen (otherwise species
-    with small Henry constant see a spurious interface source and the Y2
-    linear solve diverges). The projection reuses the case's "pcorr" solver.
+    To preserve the discrete consistency that YiEqn.H's Henry-mapped Y2
+    advection requires (alphaPhi10 = phase-1 volumetric flux, bounded by phi,
+    ~phi in water and ~0 in gas), the alpha MULES step is still solved each
+    PIMPLE iteration and produces alphaPhi10, then alpha1 is immediately
+    restored to its oldTime value so the interface stays frozen. The
+    residual divergence in alphaPhi10 is then bounded by how much alpha
+    would have moved (~ alpha Courant number per step), which keeps the Y2
+    matrix well-conditioned even for low-Henry-constant species.
 
 \*---------------------------------------------------------------------------*/
 
@@ -197,12 +195,15 @@ int main(int argc, char *argv[])
 
             #include "YiMulesEqn.H"
 
-            // Frozen alpha: skip alphaEqnSubCycle.H. alpha1 is constant
-            // in time, so rho is constant and rhoPhi just tracks the
-            // current phi (UEqn/pEqn need this each PIMPLE iteration).
-            // The discretely-conservative alphaPhi10 used by YiEqn.H
-            // is built by a Hodge projection outside the PIMPLE loop.
-            rhoPhi = fvc::interpolate(rho)*phi;
+            // Frozen alpha: run the MULES alpha step to produce a
+            // physically-bounded alphaPhi10 (= phase-1 volumetric flux
+            // through each face) and an updated rhoPhi, then restore
+            // alpha1 to its oldTime so the interface stays fixed.
+            // alpha2 and rho are reset for consistency.
+            #include "alphaEqnSubCycle.H"
+            alpha1 == alpha1.oldTime();
+            alpha2 = scalar(1) - alpha1;
+            rho == alpha1*rho1 + alpha2*rho2;
 
             gradalpha1 = mag(fvc::grad(alpha1));
 
@@ -225,49 +226,6 @@ int main(int argc, char *argv[])
             {
                 turbulence->correct();
             }
-        }
-
-        // Project phi*alpha_f onto the divergence-free subspace so the
-        // Henry-mapped species advection in YiEqn.H is discretely
-        // consistent with frozen alpha. The Y2 formulation needs
-        //   (Dbar - Dbar.oldTime)/dt + div(phiDbar) = 0
-        // to preserve Y2 = const. With alpha frozen the time term
-        // vanishes and div(phi) = 0, so the requirement collapses to
-        // div(alphaPhi10) = 0. Without this projection, species with
-        // small Henry constant (phiDbar dominated by alphaPhi10) see a
-        // spurious source at the interface and the Y2 linear solve
-        // eventually diverges. Uses the existing pcorr solver block.
-        {
-            surfaceScalarField alphaPhiUncorr
-            (
-                "alphaPhiUncorr",
-                phi*fvc::interpolate(alpha1)
-            );
-
-            volScalarField psiAlpha
-            (
-                IOobject
-                (
-                    "psiAlpha",
-                    runTime.timeName(),
-                    mesh,
-                    IOobject::NO_READ,
-                    IOobject::NO_WRITE
-                ),
-                mesh,
-                dimensionedScalar(dimArea/dimTime, Zero),
-                "zeroGradient"
-            );
-
-            fvScalarMatrix psiAlphaEqn
-            (
-                fvm::laplacian(psiAlpha) == fvc::div(alphaPhiUncorr)
-            );
-
-            psiAlphaEqn.setReference(0, scalar(0));
-            psiAlphaEqn.solve(mesh.solverDict("pcorr"));
-
-            alphaPhi10 = alphaPhiUncorr - psiAlphaEqn.flux();
         }
 
         #include "YiEqn.H"
