@@ -18,12 +18,15 @@ Description
     species transport (YiMulesEqn + Henry-mapped YiEqn), BRNS reactions,
     turbulence, and dynamic-mesh hooks all run as in interBRNSFoam.
 
-    The fluxes that alphaEqn.H would have produced are filled with their
-    no-advection equivalents so downstream code stays consistent:
-        alphaPhi10 = phi * fvc::interpolate(alpha1)
-        rhoPhi     = fvc::interpolate(rho) * phi
-    Since alpha1 is constant in time, rho is also constant; rhoPhi tracks
-    the evolving phi each PIMPLE iteration.
+    Inside the PIMPLE loop, rhoPhi is refreshed as fvc::interpolate(rho)*phi
+    (rho is fixed since alpha1 is). Outside the PIMPLE loop, a Hodge
+    projection produces a discretely divergence-free alphaPhi10:
+        lap(psi) = div(phi*alpha_f)        (zeroGradient BCs)
+        alphaPhi10 = phi*alpha_f - psiEqn.flux()
+    This satisfies the discrete identity div(alphaPhi10) = 0 that YiEqn.H's
+    Henry-mapped formulation requires when alpha is frozen (otherwise species
+    with small Henry constant see a spurious interface source and the Y2
+    linear solve diverges). The projection reuses the case's "pcorr" solver.
 
 \*---------------------------------------------------------------------------*/
 
@@ -194,11 +197,11 @@ int main(int argc, char *argv[])
 
             #include "YiMulesEqn.H"
 
-            // Frozen alpha: skip alphaEqnSubCycle.H. Refresh the fluxes
-            // that alphaEqn.H would otherwise have produced so the rest
-            // of the algorithm (UEqn, pEqn, YiEqn) sees consistent
-            // values with the (unchanged) alpha1 and the current phi.
-            alphaPhi10 = phi*fvc::interpolate(alpha1);
+            // Frozen alpha: skip alphaEqnSubCycle.H. alpha1 is constant
+            // in time, so rho is constant and rhoPhi just tracks the
+            // current phi (UEqn/pEqn need this each PIMPLE iteration).
+            // The discretely-conservative alphaPhi10 used by YiEqn.H
+            // is built by a Hodge projection outside the PIMPLE loop.
             rhoPhi = fvc::interpolate(rho)*phi;
 
             gradalpha1 = mag(fvc::grad(alpha1));
@@ -222,6 +225,49 @@ int main(int argc, char *argv[])
             {
                 turbulence->correct();
             }
+        }
+
+        // Project phi*alpha_f onto the divergence-free subspace so the
+        // Henry-mapped species advection in YiEqn.H is discretely
+        // consistent with frozen alpha. The Y2 formulation needs
+        //   (Dbar - Dbar.oldTime)/dt + div(phiDbar) = 0
+        // to preserve Y2 = const. With alpha frozen the time term
+        // vanishes and div(phi) = 0, so the requirement collapses to
+        // div(alphaPhi10) = 0. Without this projection, species with
+        // small Henry constant (phiDbar dominated by alphaPhi10) see a
+        // spurious source at the interface and the Y2 linear solve
+        // eventually diverges. Uses the existing pcorr solver block.
+        {
+            surfaceScalarField alphaPhiUncorr
+            (
+                "alphaPhiUncorr",
+                phi*fvc::interpolate(alpha1)
+            );
+
+            volScalarField psiAlpha
+            (
+                IOobject
+                (
+                    "psiAlpha",
+                    runTime.timeName(),
+                    mesh,
+                    IOobject::NO_READ,
+                    IOobject::NO_WRITE
+                ),
+                mesh,
+                dimensionedScalar(dimArea/dimTime, Zero),
+                "zeroGradient"
+            );
+
+            fvScalarMatrix psiAlphaEqn
+            (
+                fvm::laplacian(psiAlpha) == fvc::div(alphaPhiUncorr)
+            );
+
+            psiAlphaEqn.setReference(0, scalar(0));
+            psiAlphaEqn.solve(mesh.solverDict("pcorr"));
+
+            alphaPhi10 = alphaPhiUncorr - psiAlphaEqn.flux();
         }
 
         #include "YiEqn.H"
