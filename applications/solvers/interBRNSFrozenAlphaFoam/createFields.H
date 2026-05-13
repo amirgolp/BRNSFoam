@@ -271,6 +271,9 @@ if (p_rgh.needReference())
 mesh.setFluxRequired(p_rgh.name());
 mesh.setFluxRequired(alpha1.name());
 mesh.setFluxRequired(pc.name());
+// Frozen-alpha Hodge projection (interBRNSFrozenAlphaFoam.C) calls
+// psiAlphaEqn.flux(), so register psiAlpha here.
+mesh.setFluxRequired("psiAlpha");
 
 // MULES compressed flux is registered in case scalarTransport FO needs it.
 surfaceScalarField alphaPhiUn
