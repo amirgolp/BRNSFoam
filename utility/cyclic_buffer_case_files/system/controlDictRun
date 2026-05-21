@@ -25,6 +25,17 @@ FoamFile
 // (~2 um cell pitch) capillary-driven flow following channelSTL_S65's
 // successful settings.
 
+// Load stock OpenFOAM's twoPhaseProperties library so the
+// `constantAlphaContactAngle` BC on `walls` and `solidwalls` resolves at
+// runtime.  Neither stock interFoam nor interBRNSFoam pulls this lib in
+// automatically; without it the field-load step fatals with "Unknown
+// patchField type constantAlphaContactAngle for patch type wall".
+//
+// Per CLAUDE.md, loading this alongside BRNSFoam's interfaceProperties
+// fork (when running interBRNSFoam) prints non-fatal "Duplicate entry"
+// stack traces on the scheme registry -- harmless, ignore.
+libs            ("libtwoPhaseProperties.so");
+
 application     interBRNSFoam;
 
 // startFrom latestTime lets a resubmitted job resume from the most recent
@@ -34,7 +45,11 @@ startFrom       latestTime;
 startTime       0;
 
 stopAt          endTime;
-endTime         0.001;
+// 10 ms = ~1500 capillary timescales on this geometry.  Long enough to
+// forget the setFields stripe IC and let bubbles coalesce / snap off
+// toward a uniform-Pc steady state.  Watch <pc> over time and stop /
+// extend based on convergence.
+endTime         0.01;
 
 deltaT          1e-7;
 

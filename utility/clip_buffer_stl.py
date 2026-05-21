@@ -3,56 +3,41 @@
 clip_buffer_stl.py
 ==================
 
-Drop-in replacement for `make_periodic_stl.py` (the voxelize-and-marching-cubes
-buffer builder).  Carves a pure-pore slab of width `buffer_x` at each x-end of
-the simulation domain WITHOUT round-tripping the geometry through a voxel grid.
+Drop-in replacement for `make_periodic_stl.py`.  Carves a pure-pore slab of
+width `buffer_x` at each x-end of the simulation domain by:
 
-What it does
-------------
-1. Load the source grain-surface STL (already translated/scaled into the
-   blockMesh frame by `surfaceTransformPoints` upstream).
-2. Split into connected components via face-edge adjacency
-   (`scipy.sparse.csgraph.connected_components`).  Each component is one
-   grain/pebble.
-3. For every component, look at its x-bounding-box and DROP it if it:
-      - lies entirely outside the blockMesh x-range  [0, Lx], OR
-      - overlaps the left buffer slab               [0, buffer_x], OR
-      - overlaps the right buffer slab              [Lx - buffer_x, Lx].
-   Surviving components lie entirely inside [buffer_x, Lx - buffer_x].
-4. Write the surviving triangles back out as a binary STL.
+  1. Loading the source grain-surface STL (already translated/scaled into
+     the blockMesh frame by upstream `surfaceTransformPoints` calls).
+  2. Splitting the STL into connected components (one per grain).
+  3. For each component:
+       - Drop if entirely outside the blockMesh x-range [0, Lx].
+       - Keep intact if entirely inside the keep window [buffer_x,
+         Lx - buffer_x].
+       - Otherwise: slice with the plane(s) it crosses (keep the in-keep-
+         window side), CAPPING each cut.  Capping is done per-component so
+         the cap polygon for each grain is just that grain's cross-section
+         -- no long earcut "bridge" triangles connecting different grains'
+         cross-sections.
+  4. Concatenate the surviving pieces and write the result.
 
-Why this and not make_periodic_stl.py
--------------------------------------
-`make_periodic_stl.py` voxelizes the STL onto a finite lattice and re-extracts
-a surface with marching cubes.  At any voxel pitch that isn't very fine
-(< ~0.2 µm for the Grainstones STL), this:
-  - merges adjacent pebbles whose grain-grain contact is sub-voxel,
-  - pinches off narrow pore throats < 2 voxels wide,
-  - creates disconnected pore islands (checkMesh: "Number of regions: 2").
-On the Grainstones STL at 1 µm voxel pitch we measured pore fraction jumping
-from 42 % (raw STL) to 64 % (voxelized) — large enough to destroy the discrete-
-pebble structure visible in the source image.
+Why per-component capping
+-------------------------
+The earlier monolithic `slice_mesh_plane(whole_mesh, cap=True)` triangulates
+the union of ALL cut cross-sections at the buffer plane as a single complex
+polygon.  Earcut bridges across the gaps between separate grains, producing
+long cap triangles that span from one grain's cut profile to another's --
+visible in ParaView as straight wall segments connecting otherwise-distinct
+grain outlines.  Snappy treats these as solid walls, putting phantom wall
+connectors between physically separate grains.
 
-This script preserves the source geometry exactly inside the keep-window.  The
-only distortion is at the buffer-slab boundaries, where grains straddling
-those boundaries are dropped wholesale (no clipping, no capping).  Dropping
-whole components is the only way to guarantee the buffer slab is PURE pore,
-which in turn is what makes the inlet/outlet patches identical full-cross-
-section faces — the prerequisite for plain `cyclic` BCs without AMI.
-
-Limits
-------
-- Components that span the keep-window discontinuously in x (e.g. two pebbles
-  connected by a thin bridge that crosses the buffer) will be classified as
-  one component and dropped if any part overlaps the buffer.  For the
-  Grainstones STL each pebble is one component, so this is a non-issue.
-- The script does not modify normal orientation.  snappyHexMesh uses
-  locationInMesh flood-fill so normal orientation does not matter.
+Per-component slicing closes each grain's cut with a polygon whose only
+boundary is that one grain's cross-section -- no inter-grain bridges.
 
 Dependencies
 ------------
-numpy, scipy, trimesh, numpy-stl.  Exactly what `setup_venv.sh` already
-installs — no new deps.
+trimesh, numpy, scipy (for connected-components labelling via face-edge
+adjacency), and trimesh's cap=True triangulation chain (networkx, shapely,
+mapbox-earcut).  setup_venv.sh installs all of them.
 
 Usage
 -----
@@ -61,27 +46,20 @@ Usage
     python3 clip_buffer_stl.py INPUT.stl OUTPUT.stl Lx buffer_x
 
 Lx        : simulation domain length in x (metres).  Must match blockMesh.
-buffer_x  : pore-only slab width at each x-end (metres).  Typically one or
-            two blockMesh cell pitches.
-
-Example for the channelStationaryS75 case (Lx = 404 µm, buffer = 2 µm)::
-
-    python3 clip_buffer_stl.py Image_meshed.stl Image_meshed_buffered.stl \\
-        4.04e-4 2e-6
+buffer_x  : pore-only slab width at each x-end (metres).  Typically one
+            blockMesh cell pitch.  buffer_x = 0 disables clipping
+            entirely.
 """
 import os
 import sys
 
 try:
-    import numpy as np
     import trimesh
-    from scipy.sparse import csr_matrix
-    from scipy.sparse.csgraph import connected_components
-    from stl import mesh as stlmesh
+    from trimesh.intersections import slice_mesh_plane
 except ImportError as exc:
     sys.stderr.write(
-        "Missing dependency: " + str(exc) + "\n"
-        "Run setup_venv.sh first, or install: numpy scipy trimesh numpy-stl\n"
+        "Missing core dependency: " + str(exc) + "\n"
+        "Run setup_venv.sh first.\n"
     )
     sys.exit(2)
 
@@ -100,86 +78,101 @@ def clip_buffer(input_stl, output_stl, Lx, buffer_x):
     if not hasattr(m, 'faces') or len(m.faces) == 0:
         sys.stderr.write("Input is not a single non-empty triangulated mesh.\n")
         sys.exit(1)
-    n_faces = len(m.faces)
-    print(f"      triangles: {n_faces}")
+    n_in = len(m.faces)
+    print(f"      triangles: {n_in}")
     print(f"      bounds:    {m.bounds[0]}  ->  {m.bounds[1]}")
 
-    print(f"[2/4] Building face-adjacency graph and labelling components ...")
-    fa = m.face_adjacency  # (E, 2) pairs of face indices sharing an edge
-    if len(fa) == 0:
-        sys.stderr.write("STL has no shared edges (all triangles disjoint).  "
-                         "Cannot identify components.\n")
-        sys.exit(2)
-    data = np.ones(len(fa) * 2, dtype=np.int8)
-    rows = np.concatenate([fa[:, 0], fa[:, 1]])
-    cols = np.concatenate([fa[:, 1], fa[:, 0]])
-    g = csr_matrix((data, (rows, cols)), shape=(n_faces, n_faces))
-    n_comp, labels = connected_components(g, directed=False)
-    sizes = np.bincount(labels)
-    print(f"      components: {n_comp}  (tri counts: min {sizes.min()}, "
-          f"max {sizes.max()}, median {int(np.median(sizes))})")
+    if buffer_x == 0:
+        print("[2/4] buffer_x = 0; skipping clip step.")
+        m.export(output_stl)
+        print(f"[3/4] Wrote {output_stl} unchanged.")
+        return
 
-    # STL stores vertices as float32, so a value translated to exactly
-    # `buffer_x` round-trips as `buffer_x - O(1e-13)`.  A 1 nm tolerance is
-    # well below blockMesh cell pitch and lets grains that sit *exactly* on
-    # the buffer boundary count as "inside the keep window" instead of
-    # "overlapping the buffer".
+    print(f"[2/4] Splitting into connected components (one per grain) ...")
+    components = m.split(only_watertight=False)
+    print(f"      components: {len(components)}")
+
+    print(f"[3/4] Per-component slice+cap (right at x={Lx-buffer_x:g}, "
+          f"left at x={buffer_x:g}) ...")
+    # Slightly looser than float32 STL precision so a vertex landing at
+    # exactly buffer_x rounds INSIDE the keep window rather than triggering
+    # an unnecessary slice that produces a degenerate cap.
     eps = 1e-9
-    print(f"[3/4] Filtering components against buffer slabs (eps={eps:g} m) ...")
-    print(f"      keep window:        x in [{buffer_x:g}, {Lx - buffer_x:g}]")
-    print(f"      left buffer  drop:  x in [0, {buffer_x:g}]")
-    print(f"      right buffer drop:  x in [{Lx - buffer_x:g}, {Lx:g}]")
-    keep_mask = np.zeros(n_faces, dtype=bool)
-    n_keep = n_drop_left = n_drop_right = n_drop_outside = 0
-    tri_keep = tri_drop_left = tri_drop_right = tri_drop_outside = 0
-    for label in range(n_comp):
-        face_idx = np.where(labels == label)[0]
-        vert_idx = np.unique(m.faces[face_idx].flatten())
-        xmin = float(m.vertices[vert_idx, 0].min())
-        xmax = float(m.vertices[vert_idx, 0].max())
-        # Entirely outside blockMesh -> ignored anyway, but drop to keep
-        # output STL small.
-        if xmax < -eps or xmin > Lx + eps:
-            n_drop_outside += 1
-            tri_drop_outside += len(face_idx)
-            continue
-        # Overlaps left buffer [0, buffer_x] -- strictly intrudes, not just
-        # touches the boundary.
-        overlaps_left = (xmin < buffer_x - eps) and (xmax > 0.0 + eps)
-        # Overlaps right buffer [Lx - buffer_x, Lx]
-        overlaps_right = (xmin < Lx - eps) and (xmax > Lx - buffer_x + eps)
-        if overlaps_left:
-            n_drop_left += 1
-            tri_drop_left += len(face_idx)
-            continue
-        if overlaps_right:
-            n_drop_right += 1
-            tri_drop_right += len(face_idx)
-            continue
-        n_keep += 1
-        tri_keep += len(face_idx)
-        keep_mask[face_idx] = True
 
-    print(f"      components: keep={n_keep}  drop_left={n_drop_left}  "
-          f"drop_right={n_drop_right}  drop_outside={n_drop_outside}")
-    print(f"      triangles : keep={tri_keep}  drop_left={tri_drop_left}  "
-          f"drop_right={tri_drop_right}  drop_outside={tri_drop_outside}")
-    if n_keep == 0:
+    kept = []
+    n_intact = n_cut = n_drop_outside = n_drop_empty = 0
+    tri_intact = tri_cut = 0
+    for c in components:
+        cmin, cmax = float(c.bounds[0][0]), float(c.bounds[1][0])
+        # Entirely outside blockMesh x-range: drop to keep output STL small
+        # (snappy ignores them anyway).
+        if cmax < -eps or cmin > Lx + eps:
+            n_drop_outside += 1
+            continue
+        # Entirely inside the keep window: pass through unchanged.
+        if cmin >= buffer_x - eps and cmax <= Lx - buffer_x + eps:
+            kept.append(c)
+            n_intact += 1
+            tri_intact += len(c.faces)
+            continue
+        # Otherwise: at least one buffer plane crosses this component.
+        # Slice and cap, per-component, so the cap polygon is just this
+        # grain's cross-section -- no cross-grain bridges.
+        piece = c
+        if cmax > Lx - buffer_x + eps:
+            try:
+                piece = slice_mesh_plane(
+                    piece,
+                    plane_normal=[-1.0, 0.0, 0.0],
+                    plane_origin=[float(Lx - buffer_x), 0.0, 0.0],
+                    cap=True,
+                )
+            except Exception as exc:
+                sys.stderr.write(
+                    f"  right slice failed on a component (xmin={cmin*1e6:.2f} um, "
+                    f"xmax={cmax*1e6:.2f} um): {exc}\n"
+                )
+                continue
+        if piece is None or len(piece.faces) == 0:
+            n_drop_empty += 1
+            continue
+        if cmin < buffer_x - eps:
+            try:
+                piece = slice_mesh_plane(
+                    piece,
+                    plane_normal=[1.0, 0.0, 0.0],
+                    plane_origin=[float(buffer_x), 0.0, 0.0],
+                    cap=True,
+                )
+            except Exception as exc:
+                sys.stderr.write(
+                    f"  left slice failed on a component (xmin={cmin*1e6:.2f} um, "
+                    f"xmax={cmax*1e6:.2f} um): {exc}\n"
+                )
+                continue
+        if piece is None or len(piece.faces) == 0:
+            n_drop_empty += 1
+            continue
+        kept.append(piece)
+        n_cut += 1
+        tri_cut += len(piece.faces)
+
+    print(f"      components: intact={n_intact}  sliced+capped={n_cut}  "
+          f"dropped_outside={n_drop_outside}  dropped_empty={n_drop_empty}")
+    print(f"      triangles : intact={tri_intact}  sliced+capped={tri_cut}")
+    if not kept:
         sys.stderr.write("All components dropped.  Check Lx / buffer_x.\n")
         sys.exit(2)
 
-    print(f"[4/4] Writing {output_stl}")
-    kept_faces = m.faces[keep_mask]
-    out = stlmesh.Mesh(np.zeros(len(kept_faces), dtype=stlmesh.Mesh.dtype))
-    for i, f in enumerate(kept_faces):
-        for j in range(3):
-            out.vectors[i][j] = m.vertices[f[j]]
-    out.save(output_stl)
-    out_abs = os.path.abspath(output_stl)
-    print(f"      wrote {out_abs} ({len(kept_faces)} triangles)")
-    # Report final x-bounds so the user can verify the buffer is clean.
-    kx = m.vertices[np.unique(kept_faces.flatten()), 0]
-    print(f"      kept-mesh x-bounds: [{kx.min():g}, {kx.max():g}]")
+    print(f"[4/4] Concatenating {len(kept)} surviving pieces and writing "
+          f"{output_stl}")
+    merged = trimesh.util.concatenate(kept)
+    merged.export(output_stl)
+    print(f"      wrote {os.path.abspath(output_stl)} ({len(merged.faces)} "
+          f"triangles)")
+    print(f"      final bounds: {merged.bounds[0]}  ->  {merged.bounds[1]}")
+    print(f"      preserved {len(merged.faces)} of {n_in} input triangles "
+          f"({100.0 * len(merged.faces) / n_in:.1f}%)")
 
 
 def main(argv):

@@ -1,0 +1,177 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2106                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      fvSolution;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+solvers
+{
+    alpha.water
+    {
+        nAlphaCorr      2;
+        nAlphaSubCycles 4;
+        cAlpha          2.0;
+    }
+
+    Yi
+    {
+        cYi             1.0;
+
+        // Y2-reformulated YiEqn operator is symmetric, but mixed-type BCs
+        // (codedMixed, inletOutlet, ...) make the assembled matrix asymmetric
+        // for affected species. smoothSolver+symGaussSeidel handles both.
+        solver          smoothSolver;
+        smoother        symGaussSeidel;
+        nSweeps         2;
+        tolerance       1e-8;
+        relTol          0.01;
+    }
+
+    YiFinal
+    {
+        $Yi
+        relTol 0;
+    }
+    C_tracer 
+    {
+       $Yi
+    }
+    C_S
+	{
+		$Yi
+	}
+    C_O2
+    {
+       $Yi
+    }
+    C_NO
+    {
+       $Yi
+    }
+    X_S
+    {
+       $Yi
+    }
+
+    "pcorr.*"
+    {
+        solver          GAMG;
+        tolerance       1e-8;
+        relTol          0;
+        smoother        GaussSeidel;
+        nPreSweeps      0;
+        nPostSweeps     2;
+        nFinestSweeps   2;
+        cacheAgglomeration on;
+        nCellsInCoarsestLevel 10;
+        agglomerator    faceAreaPair;
+        mergeLevels     1;
+    }
+
+    p_rgh
+    {
+        // GAMG is needed (1000x density jump across alpha interface makes
+        // PCG too slow). Earlier GAMG runs crashed in the coarsest-level
+        // PCG due to AMI-induced non-local couplings producing a near-
+        // singular coarse matrix. Stopping agglomeration well before that
+        // (nCellsInCoarsestLevel 1000) keeps the coarse problem benign
+        // while still gaining the multigrid speedup.
+        solver          GAMG;
+        smoother        GaussSeidel;
+        tolerance       1e-5;
+        relTol          0.05;
+        nPreSweeps      0;
+        nPostSweeps     2;
+        nFinestSweeps   2;
+        cacheAgglomeration on;
+        nCellsInCoarsestLevel 1000;
+        agglomerator    faceAreaPair;
+        mergeLevels     1;
+    }
+
+    p_rghFinal
+    {
+        $p_rgh
+        tolerance       1e-6;
+        relTol          0;
+    }
+
+    pc
+    {
+        // GAMG runs away on this matrix when grad(alpha) is small away from
+        // the interface (near-singular, agglomeration amplifies it). PCG+DIC
+        // is symmetric-only but pc is symmetric, and DIC keeps it bounded.
+        solver          PCG;
+        preconditioner  DIC;
+        tolerance       1e-6;
+        relTol          0.01;
+        maxIter         200;
+    }
+
+    pcFinal
+    {
+        $pc
+        tolerance       1e-7;
+        relTol          0;
+    }
+
+    U
+    {
+        solver          BiCGStab;
+        preconditioner  DILU;
+        tolerance       1e-06;
+        relTol          0.01;
+    }
+    UFinal
+    {
+        solver          BiCGStab;
+        preconditioner  DILU;
+        tolerance       1e-07;
+        relTol          0;
+    }
+}
+
+PIMPLE
+{
+    pRefCell 0;
+    pRefValue 0;
+    pdRefCell 0;
+    pdRefValue 0;
+    pcRefCell 0;
+    pcRefValue 0;
+    cSK 0.5;
+    nSK 2;
+    cPc  0; 
+
+    momentumPredictor no;
+    nOuterCorrectors 1;
+    nCorrectors     3;
+    nNonOrthogonalCorrectors 1;
+    // Bumped nAlphaSubCycles 2 -> 4 after Max(alpha.water) climbed from
+    // 1.207 at t=0.84 ms to 1.591 at t=1.07 ms -- MULES was losing the
+    // interface during rapid IC-stripe breakup.  4 sub-cycles costs ~2x
+    // more on the alpha solve but keeps alpha bounded.  Bump further to
+    // 6 if Max(alpha.water) still drifts above ~1.05.
+    //
+    // The PIMPLE-block nAlphaSubCycles is the one the solver actually
+    // honors; the value in solvers{alpha.water{}} above is ignored.
+    nAlphaCorr      2;
+    nAlphaSubCycles 4;
+}
+SIMPLE
+{
+   nNonOrthogonalCorrectors 1;
+}
+
+// ************************************************************************* //
